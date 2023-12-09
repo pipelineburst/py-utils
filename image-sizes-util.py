@@ -3,6 +3,7 @@ import boto3
 import json
 from botocore.exceptions import ClientError
 import kubernetes as k8s
+import pandas as pd
 
 # resetting files
 print("Let's get the images sizes")
@@ -14,10 +15,13 @@ try:
     file.truncate()
     file = open("image_size.txt", "r+")
     file.truncate()
+    file = open("image_size_sorted.txt", "r+")
+    file.truncate()
 except Exception as e:
     file = open("image_list.txt", "w+")
     file = open("image_list_uniq.txt", "w+")
     file = open("image_size.txt", "w+")
+    file = open("image_size_sorted.txt", "w+")
     print("clearing files")
 print("Done with resetting files !")
     
@@ -72,4 +76,12 @@ with open('image_list_uniq.txt') as container_list:
         print(e)
 
 print("Done ! The image_size.txt file containes the image sizes for the running images on the k8s cluster")
+
+# sort the file image_size.txt by size
+print("Sorting the file image_size.txt by size")
+
+df = pd.read_csv("image_size.txt", sep=" ", header=None)
+df = df.sort_values(by=4, ascending=False)
+df.to_csv("image_size_sorted.txt", sep=" ", index=False, header=False)
+print("Done ! The image_size_sorted.txt file containes the image sizes for the running images on the k8s cluster")
 print("Happy Days :-)")
