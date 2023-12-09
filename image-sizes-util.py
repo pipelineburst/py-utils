@@ -46,7 +46,20 @@ with open('image_list.txt') as image_list:
     hs = open("image_list_uniq.txt","a")
     for image in images:
         hs.write(f"{image}" + "\n")
+    hs.close()
 print("Duplicates removed !")
+
+#load file and remove non-mycom images from the list to be able to get the size of the images that are running on the k8s cluster
+print("Removing non-mycom images from the list to be able to get the size of the images that are running on the k8s cluster")
+
+with open('image_list_uniq.txt') as image_list:
+    images = image_list.read().splitlines()
+    hs = open("image_list_uniq.txt","w")
+    for image in images:
+        if "docker.mycom-osi.com" in image:
+            hs.write(f"{image}" + "\n")
+    hs.close()
+print('Removed non-mycom images')
 
 region = 'eu-west-1'
 client = boto3.client('ecr')
