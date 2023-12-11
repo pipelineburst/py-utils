@@ -1,13 +1,14 @@
 # get imgages from ecr and print image name
 import boto3
-import json
-from botocore.exceptions import ClientError
 import kubernetes as k8s
 import pandas as pd
+import argparse
 
 # resetting files
-print("Let's get the images sizes")
-print("Resetting processing files...")
+print("##############################################")
+print("Let's get some info on our deployed images...")
+print("##############################################")
+print("Start resetting processing files...")
 try:
     file = open("image_list.txt", "r+")
     file.truncate()
@@ -17,11 +18,14 @@ try:
     file.truncate()
     file = open("image_size_sorted.txt", "r+")
     file.truncate()
+    file = open("image_vulns.txt", "r+")
+    file.truncate()
 except Exception as e:
     file = open("image_list.txt", "w+")
     file = open("image_list_uniq.txt", "w+")
     file = open("image_size.txt", "w+")
     file = open("image_size_sorted.txt", "w+")
+    file = open("image_vulns.txt", "w+")    
     print("clearing files")
 print("Done with resetting files !")
     
@@ -61,40 +65,86 @@ with open('image_list_uniq.txt') as image_list:
     hs.close()
 print('Removed non-mycom images')
 
-region = 'eu-west-1'
-client = boto3.client('ecr')
+val = input("What do we need? Enter size or vulns: ")
 
-print("Now getting the image sizes from ECR")
+if val == "size":
 
-with open('image_list_uniq.txt') as container_list:
-    containers = container_list.read().splitlines()
-    try: 
-        for container in containers:
-            repo = container.replace("docker.mycom-osi.com/", "").split(":")[0]
-            tag = container.split(":")[-1]
-            print(f'Success for {repo} {tag}')
-            response = client.describe_images(
-                    repositoryName=repo,
-                    imageIds=[
-                        {
-                            'imageTag': tag
-                        },
-                    ]
-            )
-            hs = open("image_size.txt","a")
-            hs.write(f" {repo}:{tag} size = {round(int(response['imageDetails'][0]['imageSizeInBytes'])/1e6)} GB"  + "\n")
-            hs.close() 
-    except Exception as e:
-        print("Oh no !")
-        print(e)
+    region = 'eu-west-1'
+    client = boto3.client('ecr')
 
-print("Done ! The image_size.txt file containes the image sizes for the running images on the k8s cluster")
+    print("Now getting the image sizes from ECR")
 
-# sort the file image_size.txt by size
-print("Sorting the file image_size.txt by size")
+    with open('image_list_uniq.txt') as container_list:
+        containers = container_list.read().splitlines()
+        try: 
+            for container in containers:
+                repo = container.replace("docker.mycom-osi.com/", "").split(":")[0]
+                tag = container.split(":")[-1]
+                response = client.describe_images(
+                        repositoryName=repo,
+                        imageIds=[
+                            {
+                                'imageTag': tag
+                            },
+                        ]
+                )
+                hs = open("image_size.txt","a")
+                hs.write(f" {repo}:{tag} size = {round(int(response['imageDetails'][0]['imageSizeInBytes'])/1e6)} MB"  + "\n")
+                hs.close() 
+                print(f" {repo}:{tag} size = {round(int(response['imageDetails'][0]['imageSizeInBytes'])/1e6)} MB")
+        except Exception as e:
+            print("Oh no !")
+            print(e)
 
-df = pd.read_csv("image_size.txt", sep=" ", header=None)
-df = df.sort_values(by=4, ascending=False)
-df.to_csv("image_size_sorted.txt", sep=" ", index=False, header=False)
-print("Done ! The image_size_sorted.txt file containes the image sizes for the running images on the k8s cluster")
-print("Happy Days :-)")
+    print("Done ! The image_size.txt file containes the image sizes for the running images on the k8s cluster")
+
+    # sort the file image_size.txt by size
+    print("Sorting the file image_size.txt by size")
+
+    df = pd.read_csv("image_size.txt", sep=" ", header=None)
+    df = df.sort_values(by=4, ascending=False)
+    df.to_csv("image_size_sorted.txt", sep=" ", index=False, header=False)
+    print("Done ! The image_size_sorted.txt file containes the image sizes for the running images on the k8s cluster")
+    print("Happy Days :-)")
+
+else:
+    region = 'eu-west-1'
+    client = boto3.client('ecr')
+
+    print("Now getting the image vulns from ECR")
+
+    with open('image_list_uniq.txt') as container_list:
+        containers = container_list.read().splitlines()
+        try: 
+            critical = 0
+            high = 0
+            medium = 0
+            low = 0
+            for container in containers:
+                repo = container.replace("docker.mycom-osi.com/", "").split(":")[0]
+                tag = container.split(":")[-1]
+                response = client.describe_image_scan_findings(
+                        repositoryName=repo,
+                        imageId={
+                                'imageTag': tag
+                        }
+                )
+                hs = open("image_vulns.txt","a")
+                if 'findingSeverityCounts' in response['imageScanFindings']:
+                    findings=response['imageScanFindings']['findingSeverityCounts']
+                    hs.write(f" {repo}:{tag} vuln counts = {(findings)}" + "\n")
+                    critical += findings.get('CRITICAL', 0)
+                    high += findings.get('HIGH', 0)
+                    medium += findings.get('MEDIUM', 0)
+                    low += findings.get('LOW', 0)
+                hs.close() 
+                print(f'{repo} {tag} {findings}')
+            print("##############################################")            
+            print('Critical: ' + str(critical))
+            print('High: ' + str(high))
+            print('Medium: ' + str(medium))
+            print('Low: ' + str(low))
+            print("##############################################")  
+        except Exception as e:
+            print("Oh no !")
+            print(e)
