@@ -1,31 +1,42 @@
+import argparse
+
+# starting with argparse to determine what the user wants to do
+argParser = argparse.ArgumentParser()
+argParser.add_argument("-l", "--list", action="store_true", help="getting the list of deployed container imgages")
+argParser.add_argument("-s", "--size", action="store_true", help="getting the size for the deployed container imgages")
+argParser.add_argument("-u", "--ubi", action="store_true", help="getting the ubi comliance status for the deployed container imgages")
+argParser.add_argument("-v", "--vuln", action="store_true", help="getting the cve finding summary for the deployed container imgages")
+argParser.add_argument("-a", "--all", action="store_true", help="getting all reports... container image list && size && vuln && ubi")
+args = argParser.parse_args()
+
+if args.all == True:
+    print("### Generating ALL the image reports ###")   
+elif args.list == True:
+    print("### Generating the LIST of deployed images ###")   
+elif args.size == True:
+    print("### Generating the SIZE report ###")
+elif args.vuln == True:
+    print("### Generating the VULN findings count report ###")
+elif args.ubi == True:
+    print("### Generating the UBI compliance report ###")     
+else:
+    print("No option provided... What should we do?")
+    print("Please use -h to find the available options") 
+    exit(1)
+
+# importing the libraries now. this makes the initial argparse faster
 import boto3
 import kubernetes as k8s
 import pandas as pd
-import argparse
 import docker
 import json
 import os
 
-argParser = argparse.ArgumentParser()
-argParser.add_argument("-a", "--action", type=str, help="define the action: size | vuln | ubi | list")
-args = argParser.parse_args()
-
-if args.action == "size":
-    print("generating the size report")
-elif args.action == "vuln":
-    print("generating the vulns report")
-elif args.action == "ubi":
-    print("generating the ubi report")    
-elif args.action == "list":
-    print("generating the deployed images list")    
-else:
-    print("What should we do?")
-    print("Please use -a size | vuln | ubi | list. Example: python runtime_image-util.py -a size") 
-    exit(1)
-
 # resetting files
+print("### Pre-Flight Checks and Prep ###")
 print("Start resetting processing files...")
 print("Clearing file...")
+
 try:
     file = open("image_list.txt", "r+")
     file.truncate()
@@ -34,11 +45,13 @@ try:
 except Exception as e:
     file = open("image_list.txt", "w+")
     file = open("image_list_uniq.txt", "w+")
+
 print("Done with resetting files !")
     
 # getting running container list from k8s cluster 
 print("Getting the running images from the k8s cluster")
 print("This takes about 10s...")
+
 k8s.config.load_kube_config()
 v1 = k8s.client.CoreV1Api()
 response_k8s = v1.list_namespaced_pod(namespace="eaa", watch=False)
@@ -46,6 +59,7 @@ for pod in response_k8s.items:
     hs = open("image_list.txt","a")
     hs.write(f"{pod.spec.containers[0].image}" + "\n")
     hs.close() 
+
 print("OK, got the list of deployed images !")
 
 # load file as list and remove duplicates
@@ -58,6 +72,7 @@ with open('image_list.txt') as image_list:
     for image in images:
         hs.write(f"{image}" + "\n")
     hs.close()
+
 print("OK, got the uniq list of deployed images!")
 
 #load file and remove non-mycom images from the list to be able to get the size of the images that are running on the k8s cluster
@@ -70,15 +85,18 @@ with open('image_list_uniq.txt') as image_list:
         if "docker.mycom-osi.com" in image:
             hs.write(f"{image}" + "\n")
     hs.close()
-print('OK, removed non-mycom images')
 
-if args.action == "list":
+print('OK, removed non-mycom images')
+print("### Completed Pre-Flight Checks and Prep ###")
+print("### Ready to go ! ###")
+
+if args.list == True or args.all == True:
     
     print("##############################################")
     print("Done ! Result file: image_list_uniq.txt")
     print("##############################################")   
 
-if args.action == "size":
+if args.size == True or args.all == True:
     
     print("##############################################")
     print("Let's get the image size report...")
@@ -100,6 +118,8 @@ if args.action == "size":
     client = boto3.client('ecr')
 
     print("Now getting the image sizes from ECR")
+    print("Printing image sizes to stdout...")
+    print("This takes about 60s...")
 
     with open('image_list_uniq.txt') as container_list:
         containers = container_list.read().splitlines()
@@ -133,7 +153,7 @@ if args.action == "size":
     print("Done ! Result file: image_size_sorted.txt")
     print("##############################################")
 
-elif args.action == "vuln":
+if args.vuln == True or args.all == True:
 
     print("##############################################")
     print("Let's get the vulnerability count report...")
@@ -154,6 +174,8 @@ elif args.action == "vuln":
     client = boto3.client('ecr')
 
     print("Now getting the image vulns from ECR")
+    print("Printing images with vulns to stdout...")
+    print("This takes about 60s...")
 
     with open('image_list_uniq.txt') as container_list:
         containers = container_list.read().splitlines()
@@ -181,6 +203,8 @@ elif args.action == "vuln":
                     low += findings.get('LOW', 0)
                 hs.close() 
                 print(f'{repo} {tag} {findings}')
+            print("##############################################")
+            print("Done ! Result file: image_vulns.txt")
             print("##############################################")            
             print('Critical: ' + str(critical))
             print('High: ' + str(high))
@@ -191,7 +215,7 @@ elif args.action == "vuln":
             print("Oh no !")
             print(e)
             
-elif args.action == "ubi":
+if args.ubi == True or args.all == True:
 
     print("##############################################")
     print("Let's get the ubi compliance report...")
@@ -207,6 +231,8 @@ elif args.action == "ubi":
 
     print("Done with resetting ubi files !")
     print("Now getting image UBI compliance")
+    print("Printing non-compliant images to stdout...")
+    print("This takes about 60s...")
     
     client = docker.from_env()
     client.login(username="mycomosi", password="mo-eaa-ecr", registry="docker.mycom-osi.com")
@@ -245,6 +271,9 @@ elif args.action == "ubi":
                         print(f"{repo}:{tag} NOT COMPLIANT")
                         ubi_nok += 1
                         ubi_total_check += 1
+                print("##############################################")
+                print("Done ! Result file: image_ubi.txt")
+                print("##############################################")   
                 print("##############################################")
                 print('UBI minimal compliant: ' + str(ubi_minimal_ok))
                 print('UBI python compliant: ' + str(ubi_python_ok))
