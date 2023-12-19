@@ -8,6 +8,7 @@ __pycache__/
 
 # my txt files
 *.txt
+src/runtime-image-util/*.txt
 
 # Distribution / packaging
 .Python

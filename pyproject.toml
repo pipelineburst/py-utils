@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "runtime-image-util"
+version = "0.0.1"
+authors = [
+  { name="dirk", email="dirk.michel@mycom-osi.com" },
+]
+description = "A small utility for getting reports for deployed images running on k8s"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "pandas==2.0.3",
+  "argparse==1.4.0",
+  "boto3==1.28.46",
+  "docker==7.0.0",
+  "kubernetes==25.3.0"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/digital-utils"]
